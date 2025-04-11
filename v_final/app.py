@@ -1,5 +1,7 @@
 import os
 import time
+import fire
+import waitress
 from flask import Flask, render_template, jsonify, request, abort
 from typing import List, Literal
 
@@ -30,8 +32,9 @@ def node_to_jstree(node: Node) -> dict:
        "scheduled": "rgba(0,0,255,0.3)"
     }
     bg_color = colors.get(node.status, "transparent")
+    # Add a title attribute so the full job name is shown on hover.
     text_html = (
-        f'<span style="background-color: {bg_color}; padding: 2px 4px; border-radius: 3px;">'
+        f'<span title="{node.name}" style="background-color: {bg_color}; padding: 2px 4px; border-radius: 3px;">'
         f'{node.name} ({node.status})'
         f'</span>'
     )
@@ -48,12 +51,11 @@ def node_to_jstree(node: Node) -> dict:
         "children": [node_to_jstree(child) for child in node.children]
     }
 
-# Helper function to generate a tree with the given number of nodes.
+# Helper function to generate a tree with the given number of nodes (now default to 100).
 def generate_example_tree(num_nodes: int = 100) -> Node:
     nodes = []
     statuses = ["scheduled", "running", "failed", "succeeded"]
     for i in range(1, num_nodes + 1):
-        # Cycle through statuses.
         status = statuses[i % len(statuses)]
         node = Node(
             name=f"Job_{i}",
@@ -74,8 +76,8 @@ def generate_example_tree(num_nodes: int = 100) -> Node:
     )
 
 app = Flask(__name__)
-# Generate a tree with 10K nodes.
-example_tree = generate_example_tree(10000)
+# Generate a tree with 100 nodes.
+example_tree = generate_example_tree(100)
 last_node_added_time = time.time()
 
 @app.route("/")
@@ -87,10 +89,10 @@ def get_tree_json():
     global example_tree, last_node_added_time
     current_time = time.time()
     # Simulate an update every 10 seconds:
-    # Only add a new node if the tree has fewer than 10K nodes.
+    # Only add a new node if the tree has fewer than 100 nodes.
     if current_time - last_node_added_time >= 10:
         import random
-        if len(example_tree.children) < 10000:
+        if len(example_tree.children) < 100:
             new_node = Node(
                 name=f"New_Job_{int(current_time)}",
                 children=[],
@@ -101,14 +103,14 @@ def get_tree_json():
             )
             example_tree.children.append(new_node)
         else:
-            # Remove the first node to maintain the 10K limit (optional)
+            # Remove the first node to maintain the 100 node limit (optional)
             example_tree.children.pop(0)
         example_tree.num_descendants = len(example_tree.children)
         last_node_added_time = current_time
     tree_json = [node_to_jstree(example_tree)]
     return jsonify(tree_json)
 
-# Enhanced endpoint to serve log file content from a given output directory.
+# Enhanced endpoint to serve log file content.
 @app.route("/get_log", methods=["GET", "HEAD"])
 def get_log():
     output_dir = request.args.get("path", "")
@@ -179,5 +181,13 @@ def list_logs():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+def main(mode="debug"):
+    if mode == "debug":
+        app.run(debug=True)
+    elif mode == "serve":
+        waitress.serve(app, host="localhost", port=5000, threads=4)
+    else:
+        print("Invalid mode. Use 'test' or 'serve'.")
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    fire.Fire(main)

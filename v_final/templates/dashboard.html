@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/bootswatch-cosmo.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/jstree.default.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/github.min.css') }}">
+    <!-- Local jQuery UI CSS (downloaded via wget) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/jquery-ui.css') }}">
     <style>
       /* GitHub-like body & container style */
       body {
@@ -46,7 +48,7 @@
         display: flex;
         align-items: center;
       }
-      /* Refresh interval dropdown */
+      /* Refresh interval dropdown with default set to 30 sec */
       #refreshInterval {
         max-width: 150px;
       }
@@ -54,11 +56,25 @@
       #sidebar {
         border-right: 1px solid #ddd;
         padding-right: 20px;
+        width: 300px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        box-sizing: border-box;
       }
-      /* Make the jsTree scrollable for large number of nodes */
+      /* Make the container row use flex so that resizing the sidebar adjusts main content */
+      .row {
+        display: flex;
+        flex-wrap: nowrap;
+      }
+      #main-content {
+        flex: 1;
+        padding-left: 20px;
+      }
+      /* Set a fixed height for jsTree with scrolling */
       #jstree {
           height: 600px;
           overflow-y: auto;
+          overflow-x: hidden;
       }
       #nodeDetails {
         margin-top: 20px;
@@ -75,6 +91,18 @@
         overflow-y: auto;
         font-family: monospace;
         font-size: 14px;
+      }
+      /* Force wrapping for long lines in log viewer code blocks */
+      .logViewer pre code {
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        white-space: pre-wrap;
+      }
+      /* Ensure that node details list items wrap long content */
+      #nodeDetails .list-group-item {
+        white-space: normal;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
       }
       /* Log viewer controls */
       .log-viewer-controls {
@@ -127,9 +155,9 @@
             <span class="input-group-text" id="refreshIntervalLabel">Refresh Interval:</span>
             <select id="refreshInterval" class="form-select" aria-label="Refresh Interval">
               <option value="1">1 sec</option>
-              <option value="5" selected>5 sec</option>
+              <option value="5">5 sec</option>
               <option value="10">10 sec</option>
-              <option value="30">30 sec</option>
+              <option value="30" selected>30 sec</option>
               <option value="60">1 min</option>
               <option value="120">2 min</option>
               <option value="180">3 min</option>
@@ -141,12 +169,12 @@
       </div>
       <div class="row">
         <!-- Sidebar with jsTree -->
-        <div id="sidebar" class="col-md-4">
+        <div id="sidebar">
           <h2>Job Tree</h2>
           <div id="jstree"></div>
         </div>
         <!-- Main content area -->
-        <div id="main-content" class="col-md-8">
+        <div id="main-content">
           <h2>Node Details</h2>
           <div id="nodeDetails">
             <p>Select a node from the tree to view its properties.</p>
@@ -178,6 +206,8 @@
   
     <!-- Local JS assets -->
     <script src="{{ url_for('static', filename='js/jquery.min.js') }}"></script>
+    <!-- Local jQuery UI JS (downloaded via wget) -->
+    <script src="{{ url_for('static', filename='js/jquery-ui.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/jstree.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/highlight.min.js') }}"></script>
@@ -264,19 +294,17 @@
               detailsHTML += "</ul>";
               $("#nodeDetails").html(detailsHTML);
 
-              // Set up the copy button (copies silently).
+              // Set up the copy button.
               $(".copy-btn").off("click").on("click", function() {
                 var textToCopy = $(this).attr("data-clipboard-text");
                 navigator.clipboard.writeText(textToCopy);
               });
 
-              // Clear previous log auto-refresh interval.
               if (logRefreshIntervalID) {
                 clearInterval(logRefreshIntervalID);
                 logRefreshIntervalID = null;
               }
 
-              // If node has an output directory, show file list and log viewer.
               if (node.data.output_dir && node.data.output_dir !== "") {
                 currentOutputDir = node.data.output_dir;
                 $("#outputFilesList, #logViewerSection").show();
@@ -309,7 +337,6 @@
             currentActiveLogFile = $(this).data("filename");
             loadLogFile(outputDir, currentActiveLogFile, "#fileContentViewer");
           });
-          // Preserve previously selected file if still present.
           if (files.length > 0) {
               if (currentActiveLogFile && files.indexOf(currentActiveLogFile) !== -1) {
                 $(".file-item[data-filename='" + currentActiveLogFile + "']").click();
@@ -380,6 +407,13 @@
           }
         });
         loadTree();
+        
+        // Make the sidebar adjustable via jQuery UI.
+        $("#sidebar").resizable({
+          handles: "e",
+          minWidth: 200,
+          maxWidth: 600
+        });
       });
     </script>
   </body>
