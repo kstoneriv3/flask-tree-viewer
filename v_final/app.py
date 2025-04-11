@@ -3,7 +3,7 @@ import time
 from flask import Flask, render_template, jsonify, request, abort
 from typing import List, Literal
 
-# Define the Node class with an additional output_dir property.
+# Define the Node class.
 class Node:
     def __init__(
         self,
@@ -30,7 +30,6 @@ def node_to_jstree(node: Node) -> dict:
        "scheduled": "rgba(0,0,255,0.3)"
     }
     bg_color = colors.get(node.status, "transparent")
-    # Wrap the text in a span with a semi-transparent background color.
     text_html = (
         f'<span style="background-color: {bg_color}; padding: 2px 4px; border-radius: 3px;">'
         f'{node.name} ({node.status})'
@@ -49,37 +48,34 @@ def node_to_jstree(node: Node) -> dict:
         "children": [node_to_jstree(child) for child in node.children]
     }
 
+# Helper function to generate a tree with the given number of nodes.
+def generate_example_tree(num_nodes: int = 100) -> Node:
+    nodes = []
+    statuses = ["scheduled", "running", "failed", "succeeded"]
+    for i in range(1, num_nodes + 1):
+        # Cycle through statuses.
+        status = statuses[i % len(statuses)]
+        node = Node(
+            name=f"Job_{i}",
+            children=[],
+            status=status,
+            num_descendants=0,
+            node_type="job",
+            output_dir=f"/tmp/example/Root_Group/Job_{i}/"
+        )
+        nodes.append(node)
+    return Node(
+        name="Root_Group",
+        children=nodes,
+        status="running",
+        num_descendants=len(nodes),
+        node_type="job_group",
+        output_dir="/tmp/example/Root_Group/"
+    )
+
 app = Flask(__name__)
-
-# Global example tree with output_dir set for all jobs.
-example_tree = Node(
-    name="Root_Group",
-    status="running",
-    num_descendants=3,
-    node_type="job_group",
-    output_dir="/tmp/example/Root_Group/",
-    children=[
-         Node(name="Job_1", children=[], status="succeeded", num_descendants=0, node_type="job",
-              output_dir="/tmp/example/Root_Group/Job_1/"),
-         Node(name="Job_2", children=[], status="failed", num_descendants=0, node_type="job",
-              output_dir="/tmp/example/Root_Group/Job_2/"),
-         Node(
-             name="Sub_Group",
-             children=[
-                  Node(name="Job_3", children=[], status="running", num_descendants=0, node_type="job",
-                       output_dir="/tmp/example/Root_Group/Sub_Group/Job_3/"),
-                  Node(name="Job_4", children=[], status="succeeded", num_descendants=0, node_type="job",
-                       output_dir="/tmp/example/Root_Group/Sub_Group/Job_4/")
-             ],
-             status="scheduled",
-             num_descendants=2,
-             node_type="job_group",
-             output_dir="/tmp/example/Root_Group/Sub_Group/"
-         )
-    ]
-)
-
-# Global variable for simulating updates.
+# Generate a tree with 10K nodes.
+example_tree = generate_example_tree(10000)
 last_node_added_time = time.time()
 
 @app.route("/")
@@ -90,11 +86,11 @@ def index():
 def get_tree_json():
     global example_tree, last_node_added_time
     current_time = time.time()
-    # Simulate: Every 10 seconds, add or remove a node.
+    # Simulate an update every 10 seconds:
+    # Only add a new node if the tree has fewer than 10K nodes.
     if current_time - last_node_added_time >= 10:
         import random
-        if random.choice([True, False]) or not example_tree.children:
-            # Add new node.
+        if len(example_tree.children) < 10000:
             new_node = Node(
                 name=f"New_Job_{int(current_time)}",
                 children=[],
@@ -105,7 +101,7 @@ def get_tree_json():
             )
             example_tree.children.append(new_node)
         else:
-            # Remove the first node.
+            # Remove the first node to maintain the 10K limit (optional)
             example_tree.children.pop(0)
         example_tree.num_descendants = len(example_tree.children)
         last_node_added_time = current_time
@@ -120,7 +116,6 @@ def get_log():
     
     if not output_dir:
         return "Invalid directory path", 400
-    # If directory doesn't exist, create it.
     if not os.path.isdir(output_dir):
         try:
             os.makedirs(output_dir, exist_ok=True)
@@ -129,14 +124,12 @@ def get_log():
 
     log_path = os.path.join(output_dir, filename)
     
-    # Handle HEAD requests.
     if request.method == "HEAD":
         if os.path.isfile(log_path):
             return "", 200
         else:
             return "", 404
     
-    # Create sample file if it doesn't exist.
     if not os.path.exists(log_path):
         try:
             if filename == "log.txt":
