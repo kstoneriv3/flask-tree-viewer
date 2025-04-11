@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>Job Dashboard</title>
+    <!-- Local CSS assets -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootswatch-cosmo.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/jstree.default.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/github.min.css') }}">
+    <style>
+      /* GitHub-like body & container style */
+      body {
+        background-color: #f6f8fa;
+        color: #24292e;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      }
+      .container {
+        background-color: #ffffff;
+        border: 1px solid #e1e4e8;
+        padding: 20px;
+        border-radius: 6px;
+      }
+      /* Header styling: dark background with white text */
+      .header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background-color: #24292e;
+        color: #fff;
+        padding: 10px 20px;
+        border-radius: 6px 6px 0 0;
+        margin-bottom: 10px;
+        gap: 10px;
+      }
+      .header-controls {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .btn-refresh {
+        white-space: nowrap;
+        min-width: 130px;
+        padding: 6px 12px;
+      }
+      .input-group {
+        display: flex;
+        align-items: center;
+      }
+      /* Refresh interval dropdown */
+      #refreshInterval {
+        max-width: 150px;
+      }
+      /* Sidebar styling */
+      #sidebar {
+        border-right: 1px solid #ddd;
+        padding-right: 20px;
+      }
+      #nodeDetails {
+        margin-top: 20px;
+      }
+      /* Log viewer style */
+      .logViewer {
+        margin-top: 15px;
+        padding: 10px;
+        background-color: #f8f9fa;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        white-space: pre-wrap;
+        max-height: 500px;
+        overflow-y: auto;
+        font-family: monospace;
+        font-size: 14px;
+      }
+      /* Log viewer controls */
+      .log-viewer-controls {
+        margin-top: 15px;
+        margin-bottom: 5px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      /* Output directory code block */
+      .output-code {
+        display: inline-block;
+        margin: 0;
+        padding: 2px 6px;
+        background-color: #f6f8fa;
+        border: 1px solid #e1e4e8;
+        border-radius: 3px;
+        font-family: monospace;
+      }
+      .copy-btn {
+        margin-left: 5px;
+      }
+      /* File list styling */
+      #outputFilesList {
+        margin-top: 20px;
+      }
+      #outputFilesList ul {
+        list-style: none;
+        padding-left: 0;
+      }
+      #outputFilesList li {
+        cursor: pointer;
+        padding: 8px 12px;
+      }
+      /* Selected file style for good contrast */
+      #outputFilesList li.active {
+        background-color: #e2e6ea !important; 
+        color: #212529 !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header Row -->
+      <div class="header">
+        <h1>Job Dashboard</h1>
+        <div class="header-controls">
+          <button id="refreshBtn" class="btn btn-primary btn-refresh">Refresh Now</button>
+          <div class="input-group">
+            <span class="input-group-text" id="refreshIntervalLabel">Refresh Interval:</span>
+            <select id="refreshInterval" class="form-select" aria-label="Refresh Interval">
+              <option value="1">1 sec</option>
+              <option value="5" selected>5 sec</option>
+              <option value="10">10 sec</option>
+              <option value="30">30 sec</option>
+              <option value="60">1 min</option>
+              <option value="120">2 min</option>
+              <option value="180">3 min</option>
+              <option value="240">4 min</option>
+              <option value="300">5 min</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <!-- Sidebar with jsTree -->
+        <div id="sidebar" class="col-md-4">
+          <h2>Job Tree</h2>
+          <div id="jstree"></div>
+        </div>
+        <!-- Main content area -->
+        <div id="main-content" class="col-md-8">
+          <h2>Node Details</h2>
+          <div id="nodeDetails">
+            <p>Select a node from the tree to view its properties.</p>
+          </div>
+          
+          <!-- Files list -->
+          <div id="outputFilesList" style="display: none;">
+            <h3>Files in Output Directory</h3>
+            <ul class="list-group"></ul>
+          </div>
+          
+          <!-- Log viewer section -->
+          <div id="logViewerSection" style="display: none;">
+            <div class="log-viewer-controls">
+              <button id="refreshLogBtn" class="btn btn-sm btn-outline-secondary">Refresh Log</button>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="autoRefreshLog">
+                <label class="form-check-label" for="autoRefreshLog">Auto-refresh</label>
+              </div>
+              <span id="lastRefreshed" class="text-muted small"></span>
+            </div>
+            <div id="fileContentViewer" class="logViewer">
+              <pre><code class="plaintext">Loading file...</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  
+    <!-- Local JS assets -->
+    <script src="{{ url_for('static', filename='js/jquery.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jstree.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/highlight.min.js') }}"></script>
+    <script>
+      var refreshIntervalID;
+      var logRefreshIntervalID;
+      var currentOutputDir = "";
+      var currentActiveLogFile = "";
+
+      // Helper to detect language class by file extension.
+      function getLanguageClass(filename) {
+        var ext = filename.split('.').pop().toLowerCase();
+        switch(ext) {
+          case 'py': return "language-python";
+          case 'js': return "language-javascript";
+          case 'json': return "language-json";
+          case 'html': return "language-html";
+          case 'css': return "language-css";
+          case 'txt': return "plaintext";
+          default: return "plaintext";
+        }
+      }
+
+      // Collect node IDs from jsTree data.
+      function collectIds(treeData) {
+        var ids = [];
+        function traverse(nodes) {
+          for (var i = 0; i < nodes.length; i++) {
+            ids.push(nodes[i].id);
+            if (nodes[i].children && nodes[i].children.length > 0) {
+              traverse(nodes[i].children);
+            }
+          }
+        }
+        traverse(treeData);
+        return ids;
+      }
+
+      // Filter saved jsTree state to include only existing nodes.
+      function filterState(state, availableIds) {
+        if (state.core && state.core.open_node) {
+          state.core.open_node = state.core.open_node.filter(function(id) {
+            return availableIds.includes(id);
+          });
+        }
+        if (state.core && state.core.selected) {
+          state.core.selected = state.core.selected.filter(function(id) {
+            return availableIds.includes(id);
+          });
+        }
+        return state;
+      }
+
+      // Load the job tree from the backend.
+      function loadTree() {
+        $.getJSON("/get_tree_json", function(data) {
+          var availableIds = collectIds(data);
+          if ($('#jstree').jstree(true)) {
+            var currentState = $('#jstree').jstree(true).get_state();
+            var filteredState = filterState(currentState, availableIds);
+            $('#jstree').jstree(true).settings.core.data = data;
+            $('#jstree').jstree(true).refresh().on("refresh.jstree", function () {
+              $('#jstree').jstree(true).set_state(filteredState);
+            });
+          } else {
+            $('#jstree').jstree({
+              'core': {
+                'data': data,
+                'themes': { "dots": true, "icons": false }
+              },
+              "plugins": ["state"]
+            }).on("select_node.jstree", function (e, data) {
+              var node = data.node;
+              var detailsHTML = "<ul class='list-group'>";
+              detailsHTML += "<li class='list-group-item'><strong>Name:</strong> " + node.data.name + "</li>";
+              detailsHTML += "<li class='list-group-item'><strong>Status:</strong> " + node.data.status + "</li>";
+              detailsHTML += "<li class='list-group-item'><strong>Number of Descendants:</strong> " + node.data.num_descendants + "</li>";
+              detailsHTML += "<li class='list-group-item'><strong>Node Type:</strong> " + node.data.node_type + "</li>";
+              if (node.data.output_dir && node.data.output_dir !== "") {
+                detailsHTML += "<li class='list-group-item'><strong>Output Directory:</strong> " +
+                  "<code class='output-code'>" + node.data.output_dir + "</code>" +
+                  " <button class='btn btn-outline-secondary btn-sm copy-btn' data-clipboard-text='" + node.data.output_dir + "'>Copy</button></li>";
+              }
+              detailsHTML += "</ul>";
+              $("#nodeDetails").html(detailsHTML);
+
+              // Set up the copy button (copies silently).
+              $(".copy-btn").off("click").on("click", function() {
+                var textToCopy = $(this).attr("data-clipboard-text");
+                navigator.clipboard.writeText(textToCopy);
+              });
+
+              // Clear previous log auto-refresh interval.
+              if (logRefreshIntervalID) {
+                clearInterval(logRefreshIntervalID);
+                logRefreshIntervalID = null;
+              }
+
+              // If node has an output directory, show file list and log viewer.
+              if (node.data.output_dir && node.data.output_dir !== "") {
+                currentOutputDir = node.data.output_dir;
+                $("#outputFilesList, #logViewerSection").show();
+                initializeOutputFilesList(currentOutputDir);
+              } else {
+                $("#outputFilesList, #logViewerSection").hide();
+                currentOutputDir = "";
+                currentActiveLogFile = "";
+              }
+            });
+          }
+        });
+      }
+
+      // Load and display file list in the output directory.
+      function initializeOutputFilesList(outputDir) {
+        $.getJSON("/list_logs", { path: outputDir }, function(files) {
+          var listHtml = "";
+          if (files.length === 0) {
+            listHtml = "<li class='list-group-item'>No files found</li>";
+          } else {
+            files.forEach(function(filename) {
+              listHtml += "<li class='list-group-item file-item' data-filename='" + filename + "'>" + filename + "</li>";
+            });
+          }
+          $("#outputFilesList ul").html(listHtml);
+          $(".file-item").off("click").on("click", function(){
+            $(".file-item").removeClass("active");
+            $(this).addClass("active");
+            currentActiveLogFile = $(this).data("filename");
+            loadLogFile(outputDir, currentActiveLogFile, "#fileContentViewer");
+          });
+          // Preserve previously selected file if still present.
+          if (files.length > 0) {
+              if (currentActiveLogFile && files.indexOf(currentActiveLogFile) !== -1) {
+                $(".file-item[data-filename='" + currentActiveLogFile + "']").click();
+              } else {
+                currentActiveLogFile = files[0];
+                $(".file-item").first().click();
+              }
+          } else {
+              $("#fileContentViewer").html("<pre><code class='plaintext'>No file content to display.</code></pre>");
+          }
+        }).fail(function(jqXHR) {
+          console.error("Failed to list log files:", jqXHR.responseText);
+        });
+      }
+      
+      // Load file content with syntax highlighting.
+      function loadLogFile(outputDir, filename, viewerSelector) {
+        $.ajax({
+          url: "/get_log",
+          data: { 
+            path: outputDir,
+            filename: filename
+          },
+          success: function(logContent) {
+            var langClass = getLanguageClass(filename);
+            $(viewerSelector).html("<pre><code class='" + langClass + "'>" + logContent + "</code></pre>");
+            $("#lastRefreshed").text("Last refreshed: " + new Date().toLocaleTimeString());
+            document.querySelectorAll('pre code').forEach((block) => {
+              hljs.highlightElement(block);
+            });
+          },
+          error: function(xhr) {
+            if (xhr.status === 404) {
+              $(viewerSelector).html("<pre><code class='plaintext'>Log file not found.</code></pre>");
+            } else {
+              $(viewerSelector).html("<pre><code class='plaintext'>Error loading log file: " + xhr.statusText + "</code></pre>");
+            }
+            $("#lastRefreshed").text("Last refreshed: " + new Date().toLocaleTimeString());
+          }
+        });
+      }
+      
+      // Refresh the current active file content.
+      function refreshCurrentLog() {
+        if (currentOutputDir && currentActiveLogFile) {
+          loadLogFile(currentOutputDir, currentActiveLogFile, "#fileContentViewer");
+        }
+      }
+
+      // Update the tree refresh interval.
+      function updateInterval() {
+        var intervalSec = parseInt(document.getElementById("refreshInterval").value);
+        if (refreshIntervalID) clearInterval(refreshIntervalID);
+        refreshIntervalID = setInterval(loadTree, intervalSec * 1000);
+      }
+
+      $(document).ready(function() {
+        updateInterval();
+        $("#refreshInterval").on("change", updateInterval);
+        $("#refreshBtn").on("click", loadTree);
+        $("#refreshLogBtn").on("click", refreshCurrentLog);
+        $("#autoRefreshLog").on("change", function() {
+          if ($(this).prop("checked")) {
+            logRefreshIntervalID = setInterval(refreshCurrentLog, 5000);
+          } else {
+            clearInterval(logRefreshIntervalID);
+            logRefreshIntervalID = null;
+          }
+        });
+        loadTree();
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>Job Dashboard</title>
+    <!-- Using a Bootstrap theme (Cosmo from Bootswatch, for example) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootswatch@5.2.3/dist/cosmo/bootstrap.min.css">
+    <style>
+      body {
+        padding: 20px;
+      }
+      #sidebar {
+        border-right: 1px solid #ddd;
+        padding-right: 20px;
+      }
+      #tree ul {
+        list-style-type: none;
+        padding-left: 15px;
+      }
+      #tree li {
+        margin: 4px 0;
+      }
+      /* Highlight selected node */
+      #tree li.selected > span {
+        background-color: #e0e0e0;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container-fluid">
+      <div class="row">
+        <!-- Sidebar: Tree visualization -->
+        <div id="sidebar" class="col-md-4">
+          <h2>Job Tree</h2>
+          <div id="tree">
+            {{ tree_html|safe }}
+          </div>
+        </div>
+        <!-- Main content: Node properties -->
+        <div id="main-content" class="col-md-8">
+          <h2>Node Details</h2>
+          <div id="nodeDetails">
+            <p>Select a node from the tree to view its properties.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      // Function called when a node is clicked.
+      function selectNode(element) {
+        // Remove the "selected" class from any currently selected node.
+        const currentlySelected = document.querySelectorAll('#tree li.selected');
+        currentlySelected.forEach(function(el) {
+          el.classList.remove('selected');
+        });
+        // Add "selected" class to the clicked node.
+        element.classList.add('selected');
+        
+        // Retrieve data attributes from the clicked node.
+        let name = element.getAttribute("data-name");
+        let status = element.getAttribute("data-status");
+        let numdesc = element.getAttribute("data-numdesc");
+        let nodetype = element.getAttribute("data-nodetype");
+        
+        // Build the HTML for node details.
+        let detailsHTML = "<ul class='list-group'>";
+        detailsHTML += "<li class='list-group-item'><strong>Name:</strong> " + name + "</li>";
+        detailsHTML += "<li class='list-group-item'><strong>Status:</strong> " + status + "</li>";
+        detailsHTML += "<li class='list-group-item'><strong>Number of Descendants:</strong> " + numdesc + "</li>";
+        detailsHTML += "<li class='list-group-item'><strong>Node Type:</strong> " + nodetype + "</li>";
+        detailsHTML += "</ul>";
+        
+        // Update the node details panel.
+        document.getElementById("nodeDetails").innerHTML = detailsHTML;
+      }
+    </script>
+  </body>
+</html>
+

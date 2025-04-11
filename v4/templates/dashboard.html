@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>Job Dashboard</title>
+    <!-- Using a Bootstrap theme (Cosmo from Bootswatch) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootswatch@5.2.3/dist/cosmo/bootstrap.min.css">
+    <style>
+      body {
+        padding: 20px;
+      }
+      #sidebar {
+        border-right: 1px solid #ddd;
+        padding-right: 20px;
+      }
+      #tree ul {
+        list-style-type: none;
+        padding-left: 15px;
+      }
+      #tree li {
+        margin: 4px 0;
+      }
+      #tree li.selected > span {
+        background-color: #e0e0e0;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1 class="mb-4">Job Dashboard</h1>
+      <!-- Refresh Interval Input Section -->
+      <div class="mb-4">
+        <label for="refreshInterval" class="form-label">Refresh Interval (seconds):</label>
+        <input type="number" id="refreshInterval" class="form-control" value="5" min="1" style="max-width: 200px;">
+      </div>
+      <div class="row">
+        <!-- Sidebar: Tree visualization -->
+        <div id="sidebar" class="col-md-4">
+          <h2>Job Tree</h2>
+          <div id="tree">
+            {{ tree_html|safe }}
+          </div>
+        </div>
+        <!-- Main content: Node details -->
+        <div id="main-content" class="col-md-8">
+          <h2>Node Details</h2>
+          <div id="nodeDetails">
+            <p>Select a node from the tree to view its properties.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      // Global variable for the refresh interval ID
+      var refreshIntervalID;
+
+      // Function to load the tree by calling the "/get_tree" endpoint
+      function loadTree() {
+        fetch("/get_tree")
+          .then(response => response.text())
+          .then(data => {
+            document.getElementById("tree").innerHTML = data;
+          })
+          .catch(error => console.error("Error loading tree:", error));
+      }
+
+      // Function to update the refresh interval based on user input
+      function updateInterval() {
+        var intervalSec = parseInt(document.getElementById("refreshInterval").value);
+        // Clear any existing interval timer
+        if (refreshIntervalID) clearInterval(refreshIntervalID);
+        // Set new interval (converted to milliseconds)
+        refreshIntervalID = setInterval(loadTree, intervalSec * 1000);
+      }
+
+      // Function called when a node is clicked.
+      function selectNode(event, element) {
+        event.stopPropagation();
+        const currentlySelected = document.querySelectorAll('#tree li.selected');
+        currentlySelected.forEach(function(el) {
+          el.classList.remove('selected');
+        });
+        element.classList.add('selected');
+        var name = element.getAttribute("data-name");
+        var status = element.getAttribute("data-status");
+        var numdesc = element.getAttribute("data-numdesc");
+        var nodetype = element.getAttribute("data-nodetype");
+        var detailsHTML = "<ul class='list-group'>";
+        detailsHTML += "<li class='list-group-item'><strong>Name:</strong> " + name + "</li>";
+        detailsHTML += "<li class='list-group-item'><strong>Status:</strong> " + status + "</li>";
+        detailsHTML += "<li class='list-group-item'><strong>Number of Descendants:</strong> " + numdesc + "</li>";
+        detailsHTML += "<li class='list-group-item'><strong>Node Type:</strong> " + nodetype + "</li>";
+        detailsHTML += "</ul>";
+        document.getElementById("nodeDetails").innerHTML = detailsHTML;
+      }
+
+      // Initialize the auto-refresh on page load and update when the input changes.
+      document.addEventListener("DOMContentLoaded", function() {
+        updateInterval(); // Set the default interval.
+        document.getElementById("refreshInterval").addEventListener("change", updateInterval);
+      });
+    </script>
+  </body>
+</html>
+
